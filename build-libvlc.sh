@@ -49,11 +49,11 @@ OUTPUT_DIR="${WORK_DIR}/output"
 DOCKER_DIR="${WORK_DIR}/docker-images"
 
 # Windows Docker Desktop 路径处理
-# 将 Unix 风格路径转换为 Windows 兼容路径
+# Docker Desktop 会自动处理路径转换，直接使用 Unix 风格路径
+# 注意: 不要在这里用 cygpath -w，MSYS 会错误地添加 ;C 后缀
 if [ -d /c ] || [ -d /mnt/c ]; then
-    # 检测到 MSYS/Cygwin 环境
-    VLC_DIR_WIN=$(cygpath -w "${VLC_DIR}" 2>/dev/null || echo "${VLC_DIR}")
-    OUTPUT_DIR_WIN=$(cygpath -w "${OUTPUT_DIR}" 2>/dev/null || echo "${OUTPUT_DIR}")
+    VLC_DIR_WIN="${VLC_DIR}"
+    OUTPUT_DIR_WIN="${OUTPUT_DIR}"
 else
     VLC_DIR_WIN="${VLC_DIR}"
     OUTPUT_DIR_WIN="${OUTPUT_DIR}"
