@@ -48,12 +48,26 @@ VLC_DIR="${WORK_DIR}/vlc-build"
 OUTPUT_DIR="${WORK_DIR}/output"
 DOCKER_DIR="${WORK_DIR}/docker-images"
 
+# Windows Docker Desktop 路径处理
+# 将 Unix 风格路径转换为 Windows 兼容路径
+if [ -d /c ] || [ -d /mnt/c ]; then
+    # 检测到 MSYS/Cygwin 环境
+    VLC_DIR_WIN=$(cygpath -w "${VLC_DIR}" 2>/dev/null || echo "${VLC_DIR}")
+    OUTPUT_DIR_WIN=$(cygpath -w "${OUTPUT_DIR}" 2>/dev/null || echo "${OUTPUT_DIR}")
+else
+    VLC_DIR_WIN="${VLC_DIR}"
+    OUTPUT_DIR_WIN="${OUTPUT_DIR}"
+fi
+
 echo "============================================================================"
 echo "  LibVLC Windows Build Script"
 echo "============================================================================"
 echo "VLC Commit:  ${VLC_COMMIT}"
 echo "Contrib SHA: ${CONTRIB_SHA}"
+echo "VLC Dir:     ${VLC_DIR}"
+echo "VLC Dir (Win): ${VLC_DIR_WIN}"
 echo "Output:      ${OUTPUT_DIR}"
+echo "Output (Win): ${OUTPUT_DIR_WIN}"
 echo "============================================================================"
 echo ""
 
@@ -143,8 +157,8 @@ log_info "[5/5] Building VLC..."
 log_info "Using contribs: ${CONTRIB_URL}"
 
 docker run --rm \
-    -v "${VLC_DIR}:/vlc" \
-    -v "${OUTPUT_DIR}:/output" \
+    -v "${VLC_DIR_WIN}:/vlc" \
+    -v "${OUTPUT_DIR_WIN}:/output" \
     -e VLC_PREBUILT_CONTRIBS_URL="${CONTRIB_URL}" \
     "${DOCKER_IMAGE_NAME}" \
     sh -c "git config --global --add safe.directory /vlc && \
@@ -157,8 +171,8 @@ docker run --rm \
 log_info "Copying build artifacts..."
 
 docker run --rm \
-    -v "${VLC_DIR}:/vlc" \
-    -v "${OUTPUT_DIR}:/output" \
+    -v "${VLC_DIR_WIN}:/vlc" \
+    -v "${OUTPUT_DIR_WIN}:/output" \
     "${DOCKER_IMAGE_NAME}" \
     sh -c "cp /vlc/win64/lib/.libs/libvlc.dll /output/ && \
            cp /vlc/win64/src/.libs/libvlccore.dll /output/ && \
