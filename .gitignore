@@ -1,0 +1,18 @@
+# VLC source (upstream dependency, cloned separately)
+vlc/
+vlc2/
+vlc-build/
+
+# Build outputs (generated during build)
+output/
+
+# DLLs and executables
+*.dll
+*.exe
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Docker images (can be re-cloned from videolan/docker-images)
+docker-images/
