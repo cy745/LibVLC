@@ -111,7 +111,55 @@ make: *** [../src/main.mak:726: .sum-aribb24] Error 1
 VLC_PREBUILT_CONTRIBS_URL="https://artifacts.videolan.org/vlc-3.0/win64/vlc-contrib-x86_64-w64-mingw32-<MATCHING_CONTRIB_SHA>.tar.bz2"
 ```
 
-contribs SHA 必须与 VLC 源码 commit 匹配，可在 VLC 官方 CI 配置或发布物中找到。
+---
+
+### 如何获取有效的 VLC Commit 与 Contribs SHA 配对
+
+**核心原理：** contribs SHA 是 VLC 仓库中**更新 FFmpeg 等依赖的 commit SHA**，不是 VLC 主库版本号。
+
+**方法一：通过 VideoLAN GitLab 查看（推荐）**
+
+1. 访问 https://code.videolan.org/videolan/vlc/-/commits/3.0.x
+2. 查找 "contrib: ffmpeg" 或 "contrib: update" 相关的提交
+3. 复制该提交的完整 SHA（即 contribs SHA）
+4. 使用该提交的父提交作为 VLC_COMMIT（或直接用这个 commit 本身）
+
+**示例：**
+```
+commit 4ca2c80e9a79293ceac7d640ab7963c3b000c370
+title: "contrib: ffmpeg: update to 8.1"
+→ CONTRIB_SHA = 4ca2c80e9a79293ceac7d640ab7963c3b000c370
+→ VLC_COMMIT = 2d8e0f8cf5935dca3917ce015299eb91480d8167 (此 commit 的父提交)
+```
+
+**方法二：通过 artifacts.videolan.org 查看**
+
+1. 访问 https://artifacts.videolan.org/vlc-3.0/win64/
+2. 下载最新的 `vlc-contrib-x86_64-w64-mingw32-<SHA>.tar.bz2`
+3. 使用文件名中的 SHA 作为 CONTRIB_SHA
+4. 在 VLC GitLab 上查找该 SHA 对应的 commit
+
+**方法三：通过 API 自动获取最新的有效配对**
+
+```bash
+# 获取 VLC 3.0.x 最新 commit
+VLC_COMMIT=$(curl -s "https://code.videolan.org/api/v4/projects/videolan%2Fvlc/repository/commits?ref_name=3.0.x&per_page=1" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+
+# 获取对应的 contribs SHA (contrib更新的父commit)
+CONTRIB_SHA=$(curl -s "https://code.videolan.org/api/v4/projects/videolan%2Fvlc/repository/commits?ref_name=3.0.x&per_page=1" | grep -o '"parent_ids":\[[^]]*\]' | grep -o '[a-f0-9]{40}' | head -1)
+
+# 验证 contribs 是否存在
+CONTRIB_URL="https://artifacts.videolan.org/vlc-3.0/win64/vlc-contrib-x86_64-w64-mingw32-${CONTRIB_SHA}.tar.bz2"
+curl -s -o /dev/null -w "%{http_code}" "$CONTRIB_URL"
+```
+
+**已知有效的 SHA 配对（2026-04）**
+
+| VLC Commit | VLC 版本 | Contribs SHA | 备注 |
+|------------|----------|--------------|------|
+| `2d8e0f8cf5935dca3917ce015299eb91480d8167` | 3.0.23 | `4ca2c80e9a79293ceac7d640ab7963c3b000c370` | 最新稳定版，FFmpeg 8.1 |
+| `4ca2c80e9a79293ceac7d640ab7963c3b000c370` | 3.0.23 | `4ca2c80e9a79293ceac7d640ab7963c3b000c370` | FFmpeg 8.1 更新 |
+| `2a48cfe344b792161ff47caf26d78f4661587bab` | 3.0.23 | `2a48cfe344b792161ff47caf26d78f4661587bab` | 旧版，仅 CI 变更 |
 
 ---
 
@@ -335,10 +383,13 @@ ls output/modules/*faad*.dll
 
 ### 关键 VLC Commit 与 Contribs SHA 对照表
 
-| VLC Commit | VLC 版本 | Contribs SHA |
-|------------|----------|--------------|
-| 2a48cfe344b792161ff47caf26d78f4661587bab | 3.0.x | 2a48cfe344b792161ff47caf26d78f4661587bab |
-| 578d28f6c9 | 3.0.23 | 578d28f6c9f2379164516e689418f92ac74a3445 |
+**重要说明：** contribs SHA 是 VLC 仓库中更新 FFmpeg 等依赖的 commit SHA。获取方法见上方「如何获取有效的 VLC Commit 与 Contribs SHA 配对」。
+
+| VLC Commit | VLC 版本 | Contribs SHA | 备注 |
+|------------|----------|--------------|------|
+| `2d8e0f8cf5935dca3917ce015299eb91480d8167` | 3.0.23 | `4ca2c80e9a79293ceac7d640ab7963c3b000c370` | **推荐使用**，最新稳定版 |
+| `4ca2c80e9a79293ceac7d640ab7963c3b000c370` | 3.0.23 | `4ca2c80e9a79293ceac7d640ab7963c3b000c370` | FFmpeg 8.1 更新提交 |
+| `2a48cfe344b792161ff47caf26d78f4661587bab` | 3.0.23 | `2a48cfe344b792161ff47caf26d78f4661587bab` | 旧版，仅 CI 变更 |
 
 ### VLC 官方 Docker 镜像
 

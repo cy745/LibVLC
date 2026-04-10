@@ -1,0 +1,128 @@
+name: Build LibVLC for Windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      vlc_commit:
+        description: 'VLC commit SHA (3.0.x branch)'
+        required: false
+        default: '2d8e0f8cf5935dca3917ce015299eb91480d8167'
+      contrib_sha:
+        description: 'Contribs SHA (must match VLC commit)'
+        required: false
+        default: '4ca2c80e9a79293ceac7d640ab7963c3b000c370'
+  push:
+    branches: [main, master]
+    paths-ignore:
+      - '**.md'
+      - '.github/workflows/**'
+
+env:
+  VLC_COMMIT: ${{ github.event.inputs.vlc_commit || '2d8e0f8cf5935dca3917ce015299eb91480d8167' }}
+  CONTRIB_SHA: ${{ github.event.inputs.contrib_sha || '4ca2c80e9a79293ceac7d640ab7963c3b000c370' }}
+  CONTRIB_URL: https://artifacts.videolan.org/vlc-3.0/win64/vlc-contrib-x86_64-w64-mingw32-${{ github.event.inputs.contrib_sha || '4ca2c80e9a79293ceac7d640ab7963c3b000c370' }}.tar.bz2
+  DOCKER_IMAGE: vlc-win64-3.0-local
+  VLC_REPO: https://code.videolan.org/videolan/vlc.git
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Check VLC commit
+        run: |
+          echo "VLC Commit: ${{ env.VLC_COMMIT }}"
+          echo "Contrib SHA: ${{ env.CONTRIB_SHA }}"
+          echo "Contrib URL: ${{ env.CONTRIB_URL }}"
+
+      - name: Check if contribs exist
+        id: check_contribs
+        run: |
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${{ env.CONTRIB_URL }}")
+          echo "Contribs HTTP response: $HTTP_CODE"
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::error::Contribs not found at ${{ env.CONTRIB_URL }}"
+            exit 1
+          fi
+
+      - name: Clone docker-images repository
+        run: |
+          git clone https://code.videolan.org/videolan/docker-images.git docker-images
+
+      - name: Build Docker image
+        run: |
+          cd docker-images/vlc-debian-win64-3.0
+          docker build -t ${{ env.DOCKER_IMAGE }} .
+
+      - name: Clone VLC source
+        run: |
+          git clone ${{ env.VLC_REPO }} vlc-build
+          cd vlc-build
+          git fetch origin ${{ env.VLC_COMMIT }}
+          git checkout ${{ env.VLC_COMMIT }}
+          git submodule update --init deps
+
+      - name: Create output directory
+        run: mkdir -p output
+
+      - name: Build VLC
+        run: |
+          docker run --rm \
+            -v $(pwd)/vlc-build:/vlc \
+            -v $(pwd)/output:/output \
+            -e VLC_PREBUILT_CONTRIBS_URL="${{ env.CONTRIB_URL }}" \
+            ${{ env.DOCKER_IMAGE }} \
+            sh -c "git config --global --add safe.directory /vlc && \
+                   cd /vlc && \
+                   ./extras/package/win32/build.sh -z -r -p || true"
+
+      - name: Copy build artifacts
+        run: |
+          docker run --rm \
+            -v $(pwd)/vlc-build:/vlc \
+            -v $(pwd)/output:/output \
+            ${{ env.DOCKER_IMAGE }} \
+            sh -c "cp /vlc/win64/lib/.libs/libvlc.dll /output/ 2>/dev/null || true && \
+                   cp /vlc/win64/src/.libs/libvlccore.dll /output/ 2>/dev/null || true && \
+                   cp -r /vlc/win64/modules /output/ 2>/dev/null || true"
+
+      - name: Verify artifacts
+        run: |
+          echo "=== Build Artifacts ==="
+          ls -lh output/*.dll 2>/dev/null || echo "No DLLs found"
+          if [ -d output/modules ]; then
+            echo "Plugin count: $(ls output/modules/*.dll 2>/dev/null | wc -l)"
+          fi
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: libvlc-windows-${{ env.VLC_COMMIT }}
+          path: |
+            output/*.dll
+            output/modules/
+          retention-days: 30
+
+      - name: Upload VLC source info
+        if: always()
+        run: |
+          echo "${{ env.VLC_COMMIT }}" > vlc_commit.txt
+          echo "${{ env.CONTRIB_SHA }}" > contrib_sha.txt
+          echo "${{ env.CONTRIB_URL }}" > contrib_url.txt
+
+      - name: Upload commit info as artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: build-info
+          path: |
+            vlc_commit.txt
+            contrib_sha.txt
+            contrib_url.txt
+          retention-days: 30

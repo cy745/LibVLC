@@ -14,10 +14,14 @@ VLC_REPO="https://code.videolan.org/videolan/vlc.git"
 DOCKER_IMAGE_REPO="https://code.videolan.org/videolan/docker-images.git"
 
 # VLC 源码 commit (必须是 3.0.x 分支)
-VLC_COMMIT="2a48cfe344b792161ff47caf26d78f4661587bab"
+# 推荐使用 3.0.x HEAD 或已知稳定的 commit
+VLC_COMMIT="${VLC_COMMIT:-2d8e0f8cf5935dca3917ce015299eb91480d8167}"
 
 # 与 VLC commit 匹配的 contribs SHA
-CONTRIB_SHA="2a48cfe344b792161ff47caf26d78f4661587bab"
+# 重要: contribs SHA 是更新 FFmpeg 等依赖的 commit SHA，不是 VLC 主库 commit
+# 获取方式: https://code.videolan.org/videolan/vlc/-/commits/3.0.x (查找 contrib 相关提交)
+# 或查看 artifacts.videolan.org/vlc-3.0/win64/ 获取最新的 contribs 包
+CONTRIB_SHA="${CONTRIB_SHA:-4ca2c80e9a79293ceac7d640ab7963c3b000c370}"
 CONTRIB_URL="https://artifacts.videolan.org/vlc-3.0/win64/vlc-contrib-x86_64-w64-mingw32-${CONTRIB_SHA}.tar.bz2"
 
 # Docker 镜像名称
