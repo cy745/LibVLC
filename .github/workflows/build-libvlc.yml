@@ -83,15 +83,15 @@ jobs:
       - name: Copy build artifacts
         run: |
           docker run --rm \
+            -u root \
             -v $(pwd)/vlc-build:/vlc \
             -v $(pwd)/output:/output \
             ${{ env.DOCKER_IMAGE }} \
-            sh -c "ls -la /vlc/win64/ 2>/dev/null || echo 'No win64 dir'; \
-                   ls -la /vlc/win64/lib/.libs/ 2>/dev/null || echo 'No lib/.libs dir'; \
-                   cp /vlc/win64/lib/.libs/libvlc.dll /output/ 2>/dev/null && echo 'libvlc.dll copied' || echo 'libvlc.dll not found'; \
-                   cp /vlc/win64/src/.libs/libvlccore.dll /output/ 2>/dev/null && echo 'libvlccore.dll copied' || echo 'libvlccore.dll not found'; \
+            sh -c "mkdir -p /output && \
+                   cp /vlc/win64/lib/.libs/libvlc.dll /output/ && echo 'libvlc.dll copied' || echo 'libvlc.dll not found'; \
+                   cp /vlc/win64/src/.libs/libvlccore.dll /output/ && echo 'libvlccore.dll copied' || echo 'libvlccore.dll not found'; \
                    mkdir -p /output/modules && \
-                   find /vlc/win64/modules -name '*.dll' -exec cp {} /output/modules/ \; 2>/dev/null && echo 'modules copied' || echo 'modules not found'"
+                   find /vlc/win64/modules -name '*.dll' -exec cp {} /output/modules/ \; && echo 'modules copied' || echo 'modules not found'"
 
       - name: Verify artifacts
         run: |
