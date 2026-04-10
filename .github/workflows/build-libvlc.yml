@@ -54,12 +54,9 @@ jobs:
       - name: Pull VLC Docker image
         run: |
           # Use VideoLAN's pre-built image instead of building from source
-          # Building from source takes hours and exceeds GitHub Actions resource limits
-          docker pull registry.videolan.org/vlc-debian-win64-3.0:latest || \
-          docker pull registry.videolan.org/vlc-debian-win64-3.0:latest-sjlj || \
-          echo "Warning: Could not pull pre-built image, attempting local build"
-          docker tag registry.videolan.org/vlc-debian-win64-3.0:latest ${{ env.DOCKER_IMAGE }} 2>/dev/null || \
-          docker tag registry.videolan.org/vlc-debian-win64-3.0:latest-sjlj ${{ env.DOCKER_IMAGE }} 2>/dev/null || true
+          # Available tags: 20251220085103, 20251208092116, 20211008140026
+          docker pull registry.videolan.org/vlc-debian-win64-3.0:20251220085103
+          docker tag registry.videolan.org/vlc-debian-win64-3.0:20251220085103 ${{ env.DOCKER_IMAGE }}
 
       - name: Clone VLC source
         run: |
