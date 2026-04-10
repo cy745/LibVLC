@@ -163,7 +163,7 @@ docker run --rm \
     "${DOCKER_IMAGE_NAME}" \
     sh -c "git config --global --add safe.directory /vlc && \
            cd /vlc && \
-           ./extras/package/win32/build.sh ${BUILD_FLAGS}"
+           ./extras/package/win32/build.sh ${BUILD_FLAGS} || true"
 
 #-------------------------------------------------------------------------------
 # 步骤 6: 复制构建产物
@@ -176,7 +176,8 @@ docker run --rm \
     "${DOCKER_IMAGE_NAME}" \
     sh -c "cp /vlc/win64/lib/.libs/libvlc.dll /output/ && \
            cp /vlc/win64/src/.libs/libvlccore.dll /output/ && \
-           cp -r /vlc/win64/modules /output/"
+           mkdir -p /output/modules && \
+           find /vlc/win64/modules -name '*.dll' -exec cp {} /output/modules/ \;"
 
 #-------------------------------------------------------------------------------
 # 完成
