@@ -64,7 +64,6 @@ jobs:
           cd vlc-build
           git fetch origin ${{ env.VLC_COMMIT }}
           git checkout ${{ env.VLC_COMMIT }}
-          git submodule update --init deps
 
       - name: Create output directory
         run: mkdir -p output
