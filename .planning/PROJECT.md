@@ -13,9 +13,10 @@
 ### Active
 
 - [ ] 验证 build-libvlc.sh 脚本稳定性
+- [ ] 验证 GitHub Action workflow 能够成功构建
 - [x] 补全踩坑记录：VLC commit 与 contribs SHA 的获取方法
 - [x] 创建 GitHub Action workflow
-- [ ] 确保 GitHub Action 能够成功构建并产出 libvlc.dll
+- [x] 本地构建验证成功：libvlc.dll (604K), libvlccore.dll (6.3M), 362 plugins
 
 ### Done
 
