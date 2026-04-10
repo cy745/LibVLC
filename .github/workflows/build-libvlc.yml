@@ -77,7 +77,7 @@ jobs:
             ${{ env.DOCKER_IMAGE }} \
             sh -c "git config --global --add safe.directory /vlc && \
                    cd /vlc && \
-                   ./extras/package/win32/build.sh -z -r -p; exit 0"
+                   ./extras/package/win32/build.sh -z -r -p || { echo 'Build failed'; exit 1; }"
 
       - name: Copy build artifacts
         run: |
