@@ -71,6 +71,7 @@ jobs:
       - name: Build VLC
         run: |
           docker run --rm \
+            -u root \
             -v $(pwd)/vlc-build:/vlc \
             -v $(pwd)/output:/output \
             -e VLC_PREBUILT_CONTRIBS_URL="${{ env.CONTRIB_URL }}" \
