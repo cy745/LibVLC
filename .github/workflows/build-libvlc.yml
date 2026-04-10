@@ -90,7 +90,8 @@ jobs:
             ${{ env.DOCKER_IMAGE }} \
             sh -c "cp /vlc/win64/lib/.libs/libvlc.dll /output/ 2>/dev/null || true && \
                    cp /vlc/win64/src/.libs/libvlccore.dll /output/ 2>/dev/null || true && \
-                   cp -r /vlc/win64/modules /output/ 2>/dev/null || true"
+                   mkdir -p /output/modules && \
+                   find /vlc/win64/modules -name '*.dll' -exec cp {} /output/modules/ \; 2>/dev/null || true"
 
       - name: Verify artifacts
         run: |
