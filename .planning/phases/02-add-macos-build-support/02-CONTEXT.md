@@ -21,7 +21,7 @@ Extend the LibVLC build pipeline to support macOS platform. Deliver a macOS buil
 - **D-03:** Use `macos-latest` runner — auto-updates with latest macOS, simpler matrix maintenance
 
 ### Build approach
-- **D-04:** Docker cross-compile — use VideoLAN's docker-images with Darwin cross-compile tools (mirrors Phase 1 Windows approach)
+- **D-04:** Native macOS runner — use `runs-on: macos-latest` directly (VideoLAN's Docker registry has NO Darwin cross-compile images — verified 2026-04-11). Build arm64 and x86_64 separately, combine with `lipo` for universal binary.
 
 ### GitHub Action structure
 - **D-05:** Extend existing `build-libvlc.yml` workflow with matrix strategy — add `os: [windows, macos]` dimension rather than creating separate workflows
