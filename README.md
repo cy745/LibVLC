@@ -6,13 +6,17 @@
 
 ```
 LibVLC/
-├── build-libvlc.sh      # 自动构建脚本
-├── verify-build.sh       # 构建产物验证脚本
+├── build-libvlc.sh           # Windows 自动构建脚本
+├── build-libvlc-macos.sh     # macOS 自动构建脚本
+├── verify-build.sh           # 构建产物验证脚本
 ├── docs/
 │   └── build-libvlc.md   # 完整构建文档
-├── output/               # 构建产物（构建后生成）
+├── output/                    # Windows 构建产物（构建后生成）
 │   ├── libvlc.dll        # 主库入口
 │   ├── libvlccore.dll   # 核心编解码库
+│   └── modules/          # 插件目录
+├── output-macos/               # macOS 构建产物（构建后生成）
+│   ├── libvlc.dylib     # 主库 (Universal Binary)
 │   └── modules/          # 插件目录
 ├── vlc-build/            # VLC 源码（构建后生成）
 └── docker-images/        # VLC Docker 镜像定义（构建后生成）
@@ -53,6 +57,49 @@ docker run --rm \
     vlc-win64-3.0-local \
     sh -c "cd /vlc && ./extras/package/win32/build.sh -z -r -p"
 ```
+
+## macOS 构建
+
+为 macOS x86_64 + arm64 (Universal Binary) 构建 libvlc.dylib。
+
+### 环境要求
+
+| 软件 | 版本 | 说明 |
+|------|------|------|
+| macOS | 13+ (Ventura) | 原生构建环境 |
+| Xcode | Latest | 编译器工具链 |
+| Git | Latest | 源码管理 |
+
+### 构建步骤
+
+```bash
+# 设置执行权限
+chmod +x build-libvlc-macos.sh
+
+# 执行构建 (需要 macOS 环境)
+./build-libvlc-macos.sh
+```
+
+### 构建产物
+
+| 文件 | 说明 |
+|------|------|
+| `libvlc.dylib` | libVLC 主库 (Universal Binary, arm64 + x86_64) |
+| `modules/*.dylib` | 插件目录 |
+
+### GitHub Actions
+
+macOS 构建通过 GitHub Actions 自动执行。使用 `macos-latest` runner 原生构建。
+
+### 跨平台使用
+
+```bash
+# 编译链接
+clang -o myapp myapp.c \
+    -lvlc -L./output-macos -I./include
+```
+
+注意: macOS 版 libvlc.dylib 是 Universal Binary，可同时在 Intel 和 Apple Silicon Mac 上运行。
 
 ## 构建产物
 
