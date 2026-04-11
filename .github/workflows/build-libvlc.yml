@@ -26,22 +26,34 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [windows, macos]
+        include:
+          - os: windows
+            runs-on: ubuntu-latest
+          - os: macos
+            runs-on: macos-latest
+
+    runs-on: ${{ matrix.runs-on }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
+        if: matrix.os == 'windows'
         uses: docker/setup-buildx-action@v3
 
       - name: Check VLC commit
+        if: matrix.os == 'windows'
         run: |
           echo "VLC Commit: ${{ env.VLC_COMMIT }}"
           echo "Contrib SHA: ${{ env.CONTRIB_SHA }}"
           echo "Contrib URL: ${{ env.CONTRIB_URL }}"
 
       - name: Check if contribs exist
+        if: matrix.os == 'windows'
         id: check_contribs
         run: |
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${{ env.CONTRIB_URL }}")
@@ -52,6 +64,7 @@ jobs:
           fi
 
       - name: Pull VLC Docker image
+        if: matrix.os == 'windows'
         run: |
           # Use VideoLAN's pre-built image instead of building from source
           # Available tags: 20251220085103, 20251208092116, 20211008140026
@@ -59,6 +72,7 @@ jobs:
           docker tag registry.videolan.org/vlc-debian-win64-3.0:20251220085103 ${{ env.DOCKER_IMAGE }}
 
       - name: Clone VLC source
+        if: matrix.os == 'windows'
         run: |
           git clone ${{ env.VLC_REPO }} vlc-build
           cd vlc-build
@@ -66,9 +80,11 @@ jobs:
           git checkout ${{ env.VLC_COMMIT }}
 
       - name: Create output directory
+        if: matrix.os == 'windows'
         run: mkdir -p output
 
       - name: Build VLC
+        if: matrix.os == 'windows'
         run: |
           docker run --rm \
             -u root \
@@ -81,6 +97,7 @@ jobs:
                    ./extras/package/win32/build.sh -z -r -p; exit 0"
 
       - name: Copy build artifacts
+        if: matrix.os == 'windows'
         run: |
           docker run --rm \
             -u root \
@@ -94,6 +111,7 @@ jobs:
                    find /vlc/win64/modules -name '*.dll' -exec cp {} /output/modules/ \; && echo 'modules copied' || echo 'modules not found'"
 
       - name: Verify artifacts
+        if: matrix.os == 'windows'
         run: |
           echo "=== Build Artifacts ==="
           ls -lh output/*.dll 2>/dev/null || echo "No DLLs found"
@@ -101,13 +119,31 @@ jobs:
             echo "Plugin count: $(ls output/modules/*.dll 2>/dev/null | wc -l)"
           fi
 
-      - name: Upload artifacts
+      - name: Upload Windows artifacts
+        if: matrix.os == 'windows'
         uses: actions/upload-artifact@v4
         with:
           name: libvlc-windows-${{ env.VLC_COMMIT }}
           path: |
             output/*.dll
             output/modules/
+          retention-days: 30
+
+      # macOS build steps
+      - name: Build VLC for macOS
+        if: matrix.os == 'macos'
+        run: |
+          chmod +x ./build-libvlc-macos.sh
+          ./build-libvlc-macos.sh
+
+      - name: Upload macOS artifacts
+        if: matrix.os == 'macos'
+        uses: actions/upload-artifact@v4
+        with:
+          name: libvlc-macos-${{ env.VLC_COMMIT }}
+          path: |
+            output-macos/*.dylib
+            output-macos/modules/
           retention-days: 30
 
       - name: Upload VLC source info
