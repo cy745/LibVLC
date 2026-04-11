@@ -28,9 +28,10 @@
 - README documents macOS usage
 
 **Plans:**
-- [ ] TBD (run /gsd-plan-phase 2 to break down)
+- [ ] 02-01-PLAN.md — Create macOS build script (build-libvlc-macos.sh)
+- [ ] 02-02-PLAN.md — Extend GitHub Actions with macOS matrix + README update
 
-**Status:** Not planned yet
+**Status:** Planned (2 plans, 2 waves)
 
 ---
 
@@ -39,8 +40,8 @@
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | WIN-01: GitHub Action Windows build | Phase 1 | ✓ Complete |
-| MAC-01: macOS build script | Phase 2 | ○ Pending |
-| MAC-02: macOS GitHub Action | Phase 2 | ○ Pending |
-| MAC-03: README macOS documentation | Phase 2 | ○ Pending |
+| MAC-01: macOS build script | Phase 2 | ○ Planned (02-01) |
+| MAC-02: macOS GitHub Action | Phase 2 | ○ Planned (02-02) |
+| MAC-03: README macOS documentation | Phase 2 | ○ Planned (02-02) |
 
 **Coverage:** 4 requirements, 4 mapped
