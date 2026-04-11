@@ -28,8 +28,8 @@
 - README documents macOS usage
 
 **Plans:**
-- [ ] 02-01-PLAN.md — Create macOS build script (build-libvlc-macos.sh)
-- [ ] 02-02-PLAN.md — Extend GitHub Actions with macOS matrix + README update
+- [x] 02-01-PLAN.md — Create macOS build script (build-libvlc-macos.sh)
+- [x] 02-02-PLAN.md — Extend GitHub Actions with macOS matrix + README update
 
 **Status:** Planned (2 plans, 2 waves)
 
