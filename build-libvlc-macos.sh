@@ -194,17 +194,68 @@ for arch in ${ARCHS}; do
     # macOS 15 (uname -r = 24.x) 匹配 darwin19 (arm64) / darwin18 (x86_64)
     if [ "${arch}" = "arm64" ]; then
         export VLC_FORCE_KERNELVERSION=19
+        CONTRIB_TRIPLET="aarch64-apple-darwin19"
     else
         export VLC_FORCE_KERNELVERSION=18
+        CONTRIB_TRIPLET="x86_64-apple-darwin18"
     fi
 
-    # 执行构建
-    # -a: 架构
-    # -r: release 模式 (rebuild tools + vlc; contribs 已预置，跳过 make prebuilt)
-    ./extras/package/macosx/build.sh -a "${arch}" -r || {
-        log_error "Build for ${arch} failed"
+    # 不使用 build.sh 的 -r flag，因为预编译 contribs 已就位
+    # 直接调用 VLC 的 bootstrap / configure / make
+    log_info "Bootstrapping VLC..."
+
+    # 设置编译器工具链
+    SDKROOT=$(xcrun --show-sdk-path)
+    export AR="`xcrun --find ar`"
+    export CC="`xcrun --find clang`"
+    export CXX="`xcrun --find clang++`"
+    export NM="`xcrun --find nm`"
+    export OBJC="`xcrun --find clang`"
+    export RANLIB="`xcrun --find ranlib`"
+    export STRIP="`xcrun --find strip`"
+    export SDKROOT
+    export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET}"
+    export CFLAGS="-g -arch ${arch}"
+    export CXXFLAGS="-g -arch ${arch}"
+    export OBJCFLAGS="-g -arch ${arch}"
+    export LDFLAGS="-arch ${arch}"
+    export PATH="${VLC_DIR}/extras/tools/build/bin:$PATH"
+
+    cd "${VLC_DIR}"
+
+    # Bootstrap (generate configure)
+    if [ ! -f configure ]; then
+        ./bootstrap > /dev/null || {
+            log_error "Bootstrap failed for ${arch}"
+            exit 1
+        }
+    fi
+
+    # Configure VLC
+    log_info "Configuring VLC for ${arch}..."
+    OSX_KERNELVERSION=${VLC_FORCE_KERNELVERSION}
+    BUILD_TRIPLET=$([ "${arch}" = "arm64" ] && echo "aarch64" || echo "${arch}")
+    HOST_TRIPLET=$([ "${arch}" = "arm64" ] && echo "arm64" || echo "x86_64")
+
+    ./extras/package/macosx/configure.sh \
+        --build="${BUILD_TRIPLET}-apple-darwin${OSX_KERNELVERSION}" \
+        --host="${HOST_TRIPLET}-apple-darwin${OSX_KERNELVERSION}" \
+        --with-macosx-version-min="${MACOSX_DEPLOYMENT_TARGET}" \
+        --with-macosx-sdk="${SDKROOT}" > /dev/null 2>&1 || {
+        log_error "Configure failed for ${arch}"
         exit 1
     }
+
+    # Build VLC
+    log_info "Building VLC for ${arch}..."
+    CORE_COUNT=$(getconf NPROCESSORS_ONLN 2>&1)
+    JOBS=$((CORE_COUNT + 1))
+    make -j${JOBS} || {
+        log_error "Make failed for ${arch}"
+        exit 1
+    }
+
+    log_info "Build for ${arch} complete"
 
     log_info "Build for ${arch} complete"
 done
