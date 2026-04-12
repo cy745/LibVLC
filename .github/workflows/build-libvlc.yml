@@ -145,7 +145,7 @@ jobs:
   # macOS x86_64 build (macOS 13 runner for correct darwin18 target)
   #---------------------------------------------------------------------------
   build-macos-x86_64:
-    runs-on: macos-13
+    runs-on: macos-26-intel
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
