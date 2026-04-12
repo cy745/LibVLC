@@ -146,15 +146,23 @@ for arch in ${ARCHS}; do
     export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET}"
     export EXTRA_CFLAGS="-arch ${arch}"
     export EXTRA_LDFLAGS="-arch ${arch}"
-    # -k: continue past individual package failures (some contribs have hash mismatches on Darwin24)
-    export MAKEFLAGS="-k"
+
+    # 设置预编译 contribs URL (VideoLAN 有 macOS 预编译 contribs)
+    # aarch64-apple-darwin19 = Apple Silicon (macOS 10.15+)
+    # x86_64-apple-darwin18 = Intel (macOS 10.14+)
+    if [ "${arch}" = "arm64" ]; then
+        export VLC_PREBUILT_CONTRIBS_URL="https://artifacts.videolan.org/vlc-3.0/macos-arm64/vlc-contrib-aarch64-apple-darwin19-${CONTRIB_SHA}.tar.bz2"
+    else
+        export VLC_PREBUILT_CONTRIBS_URL="https://artifacts.videolan.org/vlc-3.0/macos-x86_64/vlc-contrib-x86_64-apple-darwin18-${CONTRIB_SHA}.tar.bz2"
+    fi
+    log_info "Using prebuilt contribs: ${VLC_PREBUILT_CONTRIBS_URL}"
 
     # 执行构建
     # -a: 架构
-    # -c: 从源码构建 contribs (必须，因为 Darwin24 预编译 contribs 不存在，404)
-    # -r: release 模式 (rebuild tools + contribs + vlc)
-    ./extras/package/macosx/build.sh -a "${arch}" -c -r || {
-        log_warn "Build for ${arch} completed with errors (some contrib packages may have failed)"
+    # -r: release 模式 (rebuild tools + vlc; contribs 使用预编译包)
+    ./extras/package/macosx/build.sh -a "${arch}" -r || {
+        log_error "Build for ${arch} failed"
+        exit 1
     }
 
     log_info "Build for ${arch} complete"
