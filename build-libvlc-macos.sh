@@ -123,16 +123,59 @@ for arch in ${ARCHS}; do
 done
 
 #-------------------------------------------------------------------------------
-# 步骤 3: 准备输出目录
+# 步骤 3: 下载并预置预编译 contribs（绕过 build.sh 的 make prebuilt bug）
 #-------------------------------------------------------------------------------
-log_info "[3/6] Preparing output directory..."
+log_info "[3/6] Downloading and extracting prebuilt contribs..."
+
+for arch in ${ARCHS}; do
+    VLC_DIR="${WORK_DIR}/vlc-build-${arch}"
+    cd "${VLC_DIR}"
+
+    if [ "${arch}" = "arm64" ]; then
+        CONTRIB_TRIPLET="aarch64-apple-darwin19"
+        CONTRIB_URL="https://artifacts.videolan.org/vlc-3.0/macos-arm64/vlc-contrib-aarch64-apple-darwin19-${CONTRIB_SHA}.tar.bz2"
+    else
+        CONTRIB_TRIPLET="x86_64-apple-darwin18"
+        CONTRIB_URL="https://artifacts.videolan.org/vlc-3.0/macos-x86_64/vlc-contrib-x86_64-apple-darwin18-${CONTRIB_SHA}.tar.bz2"
+    fi
+
+    log_info "Downloading contribs for ${arch} (${CONTRIB_TRIPLET})..."
+    log_info "URL: ${CONTRIB_URL}"
+
+    mkdir -p contrib
+    cd contrib
+
+    # 下载预编译包
+    curl -f -L --retry 3 --output "vlc-contrib-${CONTRIB_TRIPLET}.tar.bz2" -- "${CONTRIB_URL}" || {
+        log_error "Failed to download contribs for ${arch}"
+        exit 1
+    }
+
+    # 删除旧目录（如存在）
+    rm -rf "${CONTRIB_TRIPLET}"
+
+    # 解压到正确位置（tarball 里就是正确的 triplet 目录名）
+    tar xjf "vlc-contrib-${CONTRIB_TRIPLET}.tar.bz2" || {
+        log_error "Failed to extract contribs for ${arch}"
+        exit 1
+    }
+
+    rm -f "vlc-contrib-${CONTRIB_TRIPLET}.tar.bz2"
+    log_info "Contribs for ${arch} ready: ${VLC_DIR}/contrib/${CONTRIB_TRIPLET}"
+    cd ../..
+done
+
+#-------------------------------------------------------------------------------
+# 步骤 4: 准备输出目录
+#-------------------------------------------------------------------------------
+log_info "[4/6] Preparing output directory..."
 rm -rf "${OUTPUT_DIR}"
 mkdir -p "${OUTPUT_DIR}"
 
 #-------------------------------------------------------------------------------
-# 步骤 4: 为每个架构构建 VLC
+# 步骤 5: 为每个架构构建 VLC
 #-------------------------------------------------------------------------------
-log_info "[4/6] Building VLC for each architecture..."
+log_info "[5/6] Building VLC for each architecture..."
 
 for arch in ${ARCHS}; do
     VLC_DIR="${WORK_DIR}/vlc-build-${arch}"
@@ -148,21 +191,16 @@ for arch in ${ARCHS}; do
     export EXTRA_LDFLAGS="-arch ${arch}"
 
     # 强制 macOS kernel 版本以匹配 VideoLAN 的预编译包 triplet
-    # macOS 15 (Sonoma/Sequoia) 的 uname -r = 24.x，但预编译包只有 darwin19 (arm64) 和 darwin18 (x86_64)
-    # 必须设置 VLC_FORCE_KERNELVERSION，否则 VLC Makefile 查找 darwin24 的包（不存在）
+    # macOS 15 (uname -r = 24.x) 匹配 darwin19 (arm64) / darwin18 (x86_64)
     if [ "${arch}" = "arm64" ]; then
         export VLC_FORCE_KERNELVERSION=19
-        export VLC_PREBUILT_CONTRIBS_URL="https://artifacts.videolan.org/vlc-3.0/macos-arm64/vlc-contrib-aarch64-apple-darwin19-${CONTRIB_SHA}.tar.bz2"
     else
         export VLC_FORCE_KERNELVERSION=18
-        export VLC_PREBUILT_CONTRIBS_URL="https://artifacts.videolan.org/vlc-3.0/macos-x86_64/vlc-contrib-x86_64-apple-darwin18-${CONTRIB_SHA}.tar.bz2"
     fi
-    log_info "Using prebuilt contribs: ${VLC_PREBUILT_CONTRIBS_URL}"
-    log_info "Forcing kernel version: ${VLC_FORCE_KERNELVERSION}"
 
     # 执行构建
     # -a: 架构
-    # -r: release 模式 (rebuild tools + vlc; contribs 使用预编译包)
+    # -r: release 模式 (rebuild tools + vlc; contribs 已预置，跳过 make prebuilt)
     ./extras/package/macosx/build.sh -a "${arch}" -r || {
         log_error "Build for ${arch} failed"
         exit 1
@@ -172,9 +210,9 @@ for arch in ${ARCHS}; do
 done
 
 #-------------------------------------------------------------------------------
-# 步骤 5: 合并为 Universal Binary
+# 步骤 6: 合并为 Universal Binary
 #-------------------------------------------------------------------------------
-log_info "[5/6] Creating Universal Binary (arm64 + x86_64)..."
+log_info "[6/7] Creating Universal Binary (arm64 + x86_64)..."
 
 cd "${WORK_DIR}"
 
@@ -200,7 +238,7 @@ lipo -info "${OUTPUT_DIR}/libvlc.dylib"
 #-------------------------------------------------------------------------------
 # 步骤 6: 复制 modules 目录
 #-------------------------------------------------------------------------------
-log_info "[6/6] Copying modules..."
+log_info "[7/7] Copying modules..."
 
 # 从 x86_64 构建中复制 modules (arm64 构建也有相同的 modules)
 if [ -d "${WORK_DIR}/vlc-build-x86_64/modules" ]; then
