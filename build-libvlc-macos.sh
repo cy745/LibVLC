@@ -147,15 +147,18 @@ for arch in ${ARCHS}; do
     export EXTRA_CFLAGS="-arch ${arch}"
     export EXTRA_LDFLAGS="-arch ${arch}"
 
-    # 设置预编译 contribs URL (VideoLAN 有 macOS 预编译 contribs)
-    # aarch64-apple-darwin19 = Apple Silicon (macOS 10.15+)
-    # x86_64-apple-darwin18 = Intel (macOS 10.14+)
+    # 强制 macOS kernel 版本以匹配 VideoLAN 的预编译包 triplet
+    # macOS 15 (Sonoma/Sequoia) 的 uname -r = 24.x，但预编译包只有 darwin19 (arm64) 和 darwin18 (x86_64)
+    # 必须设置 VLC_FORCE_KERNELVERSION，否则 VLC Makefile 查找 darwin24 的包（不存在）
     if [ "${arch}" = "arm64" ]; then
+        export VLC_FORCE_KERNELVERSION=19
         export VLC_PREBUILT_CONTRIBS_URL="https://artifacts.videolan.org/vlc-3.0/macos-arm64/vlc-contrib-aarch64-apple-darwin19-${CONTRIB_SHA}.tar.bz2"
     else
+        export VLC_FORCE_KERNELVERSION=18
         export VLC_PREBUILT_CONTRIBS_URL="https://artifacts.videolan.org/vlc-3.0/macos-x86_64/vlc-contrib-x86_64-apple-darwin18-${CONTRIB_SHA}.tar.bz2"
     fi
     log_info "Using prebuilt contribs: ${VLC_PREBUILT_CONTRIBS_URL}"
+    log_info "Forcing kernel version: ${VLC_FORCE_KERNELVERSION}"
 
     # 执行构建
     # -a: 架构
