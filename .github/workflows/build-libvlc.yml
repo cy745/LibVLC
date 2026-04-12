@@ -1,4 +1,4 @@
-name: Build LibVLC for Windows
+name: Build LibVLC
 
 on:
   workflow_dispatch:
@@ -20,90 +20,68 @@ on:
 env:
   VLC_COMMIT: ${{ github.event.inputs.vlc_commit || '2d8e0f8cf5935dca3917ce015299eb91480d8167' }}
   CONTRIB_SHA: ${{ github.event.inputs.contrib_sha || '4ca2c80e9a79293ceac7d640ab7963c3b000c370' }}
-  CONTRIB_URL: https://artifacts.videolan.org/vlc-3.0/win64/vlc-contrib-x86_64-w64-mingw32-${{ github.event.inputs.contrib_sha || '4ca2c80e9a79293ceac7d640ab7963c3b000c370' }}.tar.bz2
-  DOCKER_IMAGE: vlc-win64-3.0-local
   VLC_REPO: https://code.videolan.org/videolan/vlc.git
 
 jobs:
-  build:
-    strategy:
-      matrix:
-        os: [windows, macos]
-        include:
-          - os: windows
-            runs-on: ubuntu-latest
-          - os: macos
-            runs-on: macos-latest
-
-    runs-on: ${{ matrix.runs-on }}
-
+  #---------------------------------------------------------------------------
+  # Windows build (Docker)
+  #---------------------------------------------------------------------------
+  build-windows:
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
-        if: matrix.os == 'windows'
         uses: docker/setup-buildx-action@v3
 
       - name: Check VLC commit
-        if: matrix.os == 'windows'
         run: |
           echo "VLC Commit: ${{ env.VLC_COMMIT }}"
           echo "Contrib SHA: ${{ env.CONTRIB_SHA }}"
-          echo "Contrib URL: ${{ env.CONTRIB_URL }}"
 
-      - name: Check if contribs exist
-        if: matrix.os == 'windows'
+      - name: Check if Windows contribs exist
         id: check_contribs
         run: |
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${{ env.CONTRIB_URL }}")
+          CONTRIB_URL="https://artifacts.videolan.org/vlc-3.0/win64/vlc-contrib-x86_64-w64-mingw32-${{ env.CONTRIB_SHA }}.tar.bz2"
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$CONTRIB_URL")
           echo "Contribs HTTP response: $HTTP_CODE"
           if [ "$HTTP_CODE" != "200" ]; then
-            echo "::error::Contribs not found at ${{ env.CONTRIB_URL }}"
+            echo "::error::Contribs not found at $CONTRIB_URL"
             exit 1
           fi
 
       - name: Pull VLC Docker image
-        if: matrix.os == 'windows'
         run: |
-          # Use VideoLAN's pre-built image instead of building from source
-          # Available tags: 20251220085103, 20251208092116, 20211008140026
           docker pull registry.videolan.org/vlc-debian-win64-3.0:20251220085103
-          docker tag registry.videolan.org/vlc-debian-win64-3.0:20251220085103 ${{ env.DOCKER_IMAGE }}
+          docker tag registry.videolan.org/vlc-debian-win64-3.0:20251220085103 vlc-win64-3.0-local
 
       - name: Clone VLC source
-        if: matrix.os == 'windows'
         run: |
           git clone ${{ env.VLC_REPO }} vlc-build
           cd vlc-build
           git fetch origin ${{ env.VLC_COMMIT }}
           git checkout ${{ env.VLC_COMMIT }}
 
-      - name: Create output directory
-        if: matrix.os == 'windows'
-        run: mkdir -p output
-
-      - name: Build VLC
-        if: matrix.os == 'windows'
+      - name: Build VLC (Windows)
         run: |
           docker run --rm \
             -u root \
             -v $(pwd)/vlc-build:/vlc \
             -v $(pwd)/output:/output \
-            -e VLC_PREBUILT_CONTRIBS_URL="${{ env.CONTRIB_URL }}" \
-            ${{ env.DOCKER_IMAGE }} \
+            -e VLC_PREBUILT_CONTRIBS_URL="https://artifacts.videolan.org/vlc-3.0/win64/vlc-contrib-x86_64-w64-mingw32-${{ env.CONTRIB_SHA }}.tar.bz2" \
+            vlc-win64-3.0-local \
             sh -c "git config --global --add safe.directory /vlc && \
                    cd /vlc && \
                    ./extras/package/win32/build.sh -z -r -p; exit 0"
 
       - name: Copy build artifacts
-        if: matrix.os == 'windows'
         run: |
           docker run --rm \
             -u root \
             -v $(pwd)/vlc-build:/vlc \
             -v $(pwd)/output:/output \
-            ${{ env.DOCKER_IMAGE }} \
+            vlc-win64-3.0-local \
             sh -c "mkdir -p /output && \
                    cp /vlc/win64/lib/.libs/libvlc.dll /output/ && echo 'libvlc.dll copied' || echo 'libvlc.dll not found'; \
                    cp /vlc/win64/src/.libs/libvlccore.dll /output/ && echo 'libvlccore.dll copied' || echo 'libvlccore.dll not found'; \
@@ -111,7 +89,6 @@ jobs:
                    find /vlc/win64/modules -name '*.dll' -exec cp {} /output/modules/ \; && echo 'modules copied' || echo 'modules not found'"
 
       - name: Verify artifacts
-        if: matrix.os == 'windows'
         run: |
           echo "=== Build Artifacts ==="
           ls -lh output/*.dll 2>/dev/null || echo "No DLLs found"
@@ -120,7 +97,6 @@ jobs:
           fi
 
       - name: Upload Windows artifacts
-        if: matrix.os == 'windows'
         uses: actions/upload-artifact@v4
         with:
           name: libvlc-windows-${{ env.VLC_COMMIT }}
@@ -129,37 +105,109 @@ jobs:
             output/modules/
           retention-days: 30
 
-      # macOS build steps
-      - name: Build VLC for macOS
-        if: matrix.os == 'macos'
+      - name: Upload build info
+        run: |
+          echo "${{ env.VLC_COMMIT }}" > vlc_commit.txt
+          echo "${{ env.CONTRIB_SHA }}" > contrib_sha.txt
+
+      - name: Upload commit info as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-info-windows
+          path: |
+            vlc_commit.txt
+            contrib_sha.txt
+          retention-days: 30
+
+  #---------------------------------------------------------------------------
+  # macOS arm64 build
+  #---------------------------------------------------------------------------
+  build-macos-arm64:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build VLC for macOS arm64
         run: |
           chmod +x ./build-libvlc-macos.sh
-          ./build-libvlc-macos.sh
+          ./build-libvlc-macos.sh --arch arm64
+
+      - name: Upload arm64 artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: libvlc-macos-arm64-${{ env.VLC_COMMIT }}
+          path: |
+            output-macos/arm64/**
+          retention-days: 30
+
+  #---------------------------------------------------------------------------
+  # macOS x86_64 build (macOS 13 runner for correct darwin18 target)
+  #---------------------------------------------------------------------------
+  build-macos-x86_64:
+    runs-on: macos-13
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build VLC for macOS x86_64
+        run: |
+          chmod +x ./build-libvlc-macos.sh
+          ./build-libvlc-macos.sh --arch x86_64
+
+      - name: Upload x86_64 artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: libvlc-macos-x86_64-${{ env.VLC_COMMIT }}
+          path: |
+            output-macos/x86_64/**
+          retention-days: 30
+
+  #---------------------------------------------------------------------------
+  # Merge macOS Universal Binary
+  #---------------------------------------------------------------------------
+  merge-macos:
+    needs: [build-macos-arm64, build-macos-x86_64]
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download arm64 artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: libvlc-macos-arm64-${{ env.VLC_COMMIT }}
+          path: arm64
+
+      - name: Download x86_64 artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: libvlc-macos-x86_64-${{ env.VLC_COMMIT }}
+          path: x86_64
+
+      - name: Create output directory
+        run: mkdir -p output-macos
+
+      - name: Merge Universal Binary
+        run: |
+          ARM64_LIB=$(find arm64 -name "libvlc.dylib" | head -1)
+          X86_64_LIB=$(find x86_64 -name "libvlc.dylib" | head -1)
+          echo "arm64: $ARM64_LIB"
+          echo "x86_64: $X86_64_LIB"
+          lipo -create -output output-macos/libvlc.dylib "$ARM64_LIB" "$X86_64_LIB"
+          lipo -info output-macos/libvlc.dylib
+
+      - name: Copy modules
+        run: |
+          cp -r x86_64/modules output-macos/ 2>/dev/null || echo "No modules found"
+          MODULE_COUNT=$(ls output-macos/modules/*.dylib 2>/dev/null | wc -l | tr -d ' ')
+          echo "Modules: $MODULE_COUNT"
 
       - name: Upload macOS artifacts
-        if: matrix.os == 'macos'
         uses: actions/upload-artifact@v4
         with:
           name: libvlc-macos-${{ env.VLC_COMMIT }}
           path: |
-            output-macos/*.dylib
-            output-macos/modules/
-          retention-days: 30
-
-      - name: Upload VLC source info
-        if: always()
-        run: |
-          echo "${{ env.VLC_COMMIT }}" > vlc_commit.txt
-          echo "${{ env.CONTRIB_SHA }}" > contrib_sha.txt
-          echo "${{ env.CONTRIB_URL }}" > contrib_url.txt
-
-      - name: Upload commit info as artifact
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: build-info-${{ matrix.os }}
-          path: |
-            vlc_commit.txt
-            contrib_sha.txt
-            contrib_url.txt
+            output-macos/libvlc.dylib
+            output-macos/modules/**
           retention-days: 30

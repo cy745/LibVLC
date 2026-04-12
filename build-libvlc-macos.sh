@@ -2,23 +2,39 @@
 #===============================================================================
 # LibVLC macOS Native Build Script
 #
-# 功能: 为 macOS x86_64 + arm64 (Universal Binary) 构建 libvlc.dylib
+# 功能: 为 macOS 构建 libvlc.dylib
 # 依赖: macOS, Xcode, Git
-# 产出: libvlc.dylib (Universal Binary), modules/
+# 产出: libvlc.dylib, modules/
+#
+# 用法:
+#   ./build-libvlc-macos.sh --arch arm64    # 只构建 arm64
+#   ./build-libvlc-macos.sh --arch x86_64  # 只构建 x86_64
+#   ./build-libvlc-macos.sh                 # 构建两个架构并合并为 Universal Binary
 #===============================================================================
 
 set -e
 
+#------------------------------ 解析参数 --------------------------------
+BUILD_ARCHS=""
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --arch)
+            BUILD_ARCHS="$2"
+            shift 2
+            ;;
+        *)
+            echo "Unknown option: $1"
+            exit 1
+            ;;
+    esac
+done
+
+BUILD_ARCHS="${BUILD_ARCHS:-arm64 x86_64}"
+
 #------------------------------ 配置区域 --------------------------------
 VLC_REPO="https://code.videolan.org/videolan/vlc.git"
-
-# VLC 源码 commit (必须是 3.0.x 分支)
 VLC_COMMIT="${VLC_COMMIT:-2d8e0f8cf5935dca3917ce015299eb91480d8167}"
-
-# 与 VLC commit 匹配的 contribs SHA
 CONTRIB_SHA="${CONTRIB_SHA:-4ca2c80e9a79293ceac7d640ab7963c3b000c370}"
-
-# macOS 部署目标 (D-01: Minimum macOS 13 Ventura)
 MACOSX_DEPLOYMENT_TARGET=13
 #------------------------------ 配置区域 --------------------------------
 
@@ -32,18 +48,17 @@ log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
-# 获取脚本所在目录
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 WORK_DIR="${SCRIPT_DIR}"
 OUTPUT_DIR="${WORK_DIR}/output-macos"
 
 echo "============================================================================"
-echo "  LibVLC macOS Build Script (Universal Binary)"
+echo "  LibVLC macOS Build Script"
 echo "============================================================================"
 echo "VLC Commit:  ${VLC_COMMIT}"
 echo "Contrib SHA: ${CONTRIB_SHA}"
 echo "macOS Target: ${MACOSX_DEPLOYMENT_TARGET}"
-echo "Architectures: x86_64, arm64"
+echo "Architectures: ${BUILD_ARCHS}"
 echo "Output:      ${OUTPUT_DIR}"
 echo "============================================================================"
 echo ""
@@ -54,12 +69,11 @@ echo ""
 log_info "[1/5] Checking environment..."
 
 if [[ "$OSTYPE" != "darwin"* ]]; then
-    log_warn "Not running on macOS. Native macOS build requires macOS environment."
-    log_warn "For CI/CD, use GitHub Actions with macos-latest runner."
+    log_warn "Not running on macOS."
 fi
 
 if ! command -v xcodebuild &> /dev/null; then
-    log_error "Xcode not found. Please install Xcode from App Store."
+    log_error "Xcode not found."
     exit 1
 fi
 
@@ -69,14 +83,14 @@ if ! command -v git &> /dev/null; then
 fi
 
 if ! command -v xcrun &> /dev/null; then
-    log_error "xcrun not found. This is a macOS-only tool."
+    log_error "xcrun not found."
     exit 1
 fi
 
 log_info "Environment check passed"
 
 #-------------------------------------------------------------------------------
-# 步骤 2: 克隆 VLC 源码并 checkout
+# 步骤 2: 克隆 VLC 源码
 #-------------------------------------------------------------------------------
 log_info "[2/5] Preparing VLC source..."
 
@@ -98,99 +112,105 @@ VLC_VERSION=$(git describe --tags 2>/dev/null || echo "unknown")
 log_info "VLC version: ${VLC_VERSION}"
 
 #-------------------------------------------------------------------------------
-# 步骤 3: 构建 x86_64
+# 步骤 3: 构建各架构
 #-------------------------------------------------------------------------------
-log_info "[3/5] Building VLC for x86_64..."
+log_info "[3/5] Building VLC for each architecture..."
 
-rm -rf build
-mkdir build
-cd build
+for arch in ${BUILD_ARCHS}; do
+    log_info "----------------------------------------"
+    log_info "Building VLC for ${arch}..."
+    log_info "----------------------------------------"
 
-export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET}"
-export VLC_FORCE_KERNELVERSION=18
-export VLC_PREBUILT_CONTRIBS_URL="https://artifacts.videolan.org/vlc-3.0/macos-x86_64/vlc-contrib-x86_64-apple-darwin18-${CONTRIB_SHA}.tar.bz2"
+    rm -rf build
+    mkdir build
+    cd build
 
-log_info "VLC_FORCE_KERNELVERSION=${VLC_FORCE_KERNELVERSION}"
-log_info "VLC_PREBUILT_CONTRIBS_URL=${VLC_PREBUILT_CONTRIBS_URL}"
+    export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET}"
 
-../extras/package/macosx/build.sh -a x86_64 || {
-    log_error "Build for x86_64 failed"
-    exit 1
-}
+    if [ "${arch}" = "arm64" ]; then
+        export VLC_FORCE_KERNELVERSION=19
+        export VLC_PREBUILT_CONTRIBS_URL="https://artifacts.videolan.org/vlc-3.0/macos-arm64/vlc-contrib-aarch64-apple-darwin19-${CONTRIB_SHA}.tar.bz2"
+        BUILD_ARG="aarch64"
+    else
+        # x86_64 on macOS 13: runner is darwin18, no need to force kernel version
+        unset VLC_FORCE_KERNELVERSION
+        export VLC_PREBUILT_CONTRIBS_URL="https://artifacts.videolan.org/vlc-3.0/macos-x86_64/vlc-contrib-x86_64-apple-darwin18-${CONTRIB_SHA}.tar.bz2"
+        BUILD_ARG="x86_64"
+    fi
 
-log_info "Build for x86_64 complete"
+    log_info "VLC_FORCE_KERNELVERSION=${VLC_FORCE_KERNELVERSION:-not set}"
+    log_info "VLC_PREBUILT_CONTRIBS_URL=${VLC_PREBUILT_CONTRIBS_URL}"
 
-# 提取 x86_64 产物
-rm -rf "${OUTPUT_DIR}"
-mkdir -p "${OUTPUT_DIR}/x86_64"
-cp -r lib "${OUTPUT_DIR}/x86_64/"
-cp -r modules "${OUTPUT_DIR}/x86_64/" 2>/dev/null || true
-cp -r bin "${OUTPUT_DIR}/x86_64/" 2>/dev/null || true
+    ../extras/package/macosx/build.sh -a "${BUILD_ARG}" || {
+        log_error "Build for ${arch} failed"
+        exit 1
+    }
 
-cd ..
+    log_info "Build for ${arch} complete"
 
-#-------------------------------------------------------------------------------
-# 步骤 4: 构建 arm64
-#-------------------------------------------------------------------------------
-log_info "[4/5] Building VLC for arm64..."
+    # 提取产物到 output-macos/{arch}/
+    mkdir -p "${OUTPUT_DIR}/${arch}"
+    cp -r lib "${OUTPUT_DIR}/${arch}/" 2>/dev/null || true
+    cp -r modules "${OUTPUT_DIR}/${arch}/" 2>/dev/null || true
+    cp -r bin "${OUTPUT_DIR}/${arch}/" 2>/dev/null || true
 
-rm -rf build
-mkdir build
-cd build
-
-export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET}"
-export VLC_FORCE_KERNELVERSION=19
-export VLC_PREBUILT_CONTRIBS_URL="https://artifacts.videolan.org/vlc-3.0/macos-arm64/vlc-contrib-aarch64-apple-darwin19-${CONTRIB_SHA}.tar.bz2"
-
-log_info "VLC_FORCE_KERNELVERSION=${VLC_FORCE_KERNELVERSION}"
-log_info "VLC_PREBUILT_CONTRIBS_URL=${VLC_PREBUILT_CONTRIBS_URL}"
-
-../extras/package/macosx/build.sh -a aarch64 || {
-    log_error "Build for arm64 failed"
-    exit 1
-}
-
-log_info "Build for arm64 complete"
-
-# 提取 arm64 产物
-mkdir -p "${OUTPUT_DIR}/arm64"
-cp -r lib "${OUTPUT_DIR}/arm64/"
-cp -r modules "${OUTPUT_DIR}/arm64/" 2>/dev/null || true
-cp -r bin "${OUTPUT_DIR}/arm64/" 2>/dev/null || true
-
-cd ..
+    cd ..
+done
 
 #-------------------------------------------------------------------------------
-# 步骤 5: 合并为 Universal Binary
+# 步骤 4: 合并为 Universal Binary
 #-------------------------------------------------------------------------------
-log_info "[5/5] Creating Universal Binary..."
 
-# 找到两个架构的 libvlc.dylib
-X86_64_LIB=$(find "${OUTPUT_DIR}/x86_64" -name "libvlc.dylib" | head -1)
-ARM64_LIB=$(find "${OUTPUT_DIR}/arm64" -name "libvlc.dylib" | head -1)
+HAS_ARM64=0
+HAS_X86_64=0
 
-if [ -z "${X86_64_LIB}" ] || [ -z "${ARM64_LIB}" ]; then
-    log_error "libvlc.dylib not found for one or both architectures"
-    log_error "x86_64: ${X86_64_LIB}"
-    log_error "arm64: ${ARM64_LIB}"
-    exit 1
+for arch in ${BUILD_ARCHS}; do
+    if [ "${arch}" = "arm64" ]; then
+        HAS_ARM64=1
+    elif [ "${arch}" = "x86_64" ]; then
+        HAS_X86_64=1
+    fi
+done
+
+if [ ${HAS_ARM64} -eq 1 ] && [ ${HAS_X86_64} -eq 1 ]; then
+    log_info "[4/5] Creating Universal Binary..."
+
+    rm -rf "${OUTPUT_DIR}"
+    mkdir -p "${OUTPUT_DIR}"
+
+    ARM64_LIB=$(find "${WORK_DIR}/output-macos/arm64" -name "libvlc.dylib" 2>/dev/null | head -1)
+    X86_64_LIB=$(find "${WORK_DIR}/output-macos/x86_64" -name "libvlc.dylib" 2>/dev/null | head -1)
+
+    if [ -z "${ARM64_LIB}" ] || [ -z "${X86_64_LIB}" ]; then
+        log_error "libvlc.dylib not found:"
+        log_error "  arm64:  ${ARM64_LIB}"
+        log_error "  x86_64: ${X86_64_LIB}"
+        exit 1
+    fi
+
+    log_info "Merging arm64: ${ARM64_LIB}"
+    log_info "Merging x86_64: ${X86_64_LIB}"
+
+    lipo -create -output "${OUTPUT_DIR}/libvlc.dylib" "${ARM64_LIB}" "${X86_64_LIB}"
+
+    log_info "Universal Binary created: ${OUTPUT_DIR}/libvlc.dylib"
+    lipo -info "${OUTPUT_DIR}/libvlc.dylib"
+
+    # 复制 modules
+    if [ -d "${WORK_DIR}/output-macos/x86_64/modules" ]; then
+        cp -r "${WORK_DIR}/output-macos/x86_64/modules" "${OUTPUT_DIR}/"
+        MODULE_COUNT=$(ls "${OUTPUT_DIR}/modules"/*.dylib 2>/dev/null | wc -l | tr -d ' ')
+        log_info "Copied ${MODULE_COUNT} modules"
+    fi
+else
+    log_info "[4/5] Skipping merge (only one architecture built)"
 fi
 
-log_info "x86_64 libvlc.dylib: ${X86_64_LIB}"
-log_info "arm64 libvlc.dylib: ${ARM64_LIB}"
-
-# 合并为 Universal Binary
-lipo -create -output "${OUTPUT_DIR}/libvlc.dylib" "${X86_64_LIB}" "${ARM64_LIB}"
-
-log_info "Universal Binary created: ${OUTPUT_DIR}/libvlc.dylib"
-lipo -info "${OUTPUT_DIR}/libvlc.dylib"
-
-# 清理中间目录
-rm -rf "${OUTPUT_DIR}/x86_64" "${OUTPUT_DIR}/arm64"
-
 #-------------------------------------------------------------------------------
-# 完成
+# 步骤 5: 完成
 #-------------------------------------------------------------------------------
+log_info "[5/5] Build complete."
+
 echo ""
 echo "============================================================================"
 echo -e "${GREEN}Build Complete!${NC}"
@@ -198,24 +218,9 @@ echo "==========================================================================
 echo ""
 echo "Output directory: ${OUTPUT_DIR}"
 echo ""
-echo "Artifacts:"
 if [ -f "${OUTPUT_DIR}/libvlc.dylib" ]; then
-    echo "  libvlc.dylib   ($(du -h "${OUTPUT_DIR}/libvlc.dylib" | cut -f1)) - Universal Binary"
+    echo "Artifacts:"
+    echo "  libvlc.dylib   ($(du -h "${OUTPUT_DIR}/libvlc.dylib" | cut -f1))"
+    lipo -info "${OUTPUT_DIR}/libvlc.dylib"
 fi
-if [ -d "${OUTPUT_DIR}/modules" ]; then
-    MODULE_COUNT=$(ls "${OUTPUT_DIR}/modules"/*.dylib 2>/dev/null | wc -l | tr -d ' ')
-    echo "  modules/       (${MODULE_COUNT} modules)"
-fi
-echo ""
-echo "Binary architectures:"
-lipo -info "${OUTPUT_DIR}/libvlc.dylib"
-echo ""
-echo "============================================================================"
-echo "  Next Steps"
-echo "============================================================================"
-echo ""
-echo "1. Copy libvlc.dylib and modules/ to your macOS application"
-echo ""
-echo "2. Link your application with:"
-echo "   clang -o myapp myapp.c -lvlc -L./output-macos -I./include"
 echo ""
